@@ -1,0 +1,93 @@
+# 🧭 Nautilus
+
+**Best free open-source India macro-momentum regime dashboard** — powered by
+yfinance, real RBI data, and a 5-state Gaussian HMM.
+
+100% local · zero cloud cost · zero paid APIs · zero synthetic data.
+
+## What it does
+
+- Fetches Nifty 50 prices (`^NSEI`) and the India 10Y G-Sec yield
+  (`NIFTYGS10YR.NS`) via yfinance.
+- Loads RBI repo rate from a bundled historical CSV (public domain).
+- Fits a 5-state Gaussian HMM on price volatility + macro features.
+- Applies a **risk-gate overlay** (not aggressive Kelly scaling) that
+  preserves India's upward drift in bull markets while going cash during
+  confirmed Panic regimes.
+- Renders an interactive Streamlit dashboard with regime shading, bond yield
+  panel, Williams VixFix, equity curve backtest, and CSV exports.
+
+## Quickstart
+
+```bash
+git clone https://github.com/chrislernunes/Nautilus
+cd Nautilus
+
+python -m venv .venv
+# Linux/macOS:
+source .venv/bin/activate
+# Windows MSYS2 UCRT64:
+source .venv/Scripts/activate
+
+pip install -e ".[dev]"
+pip install hmmlearn   # enables 5-state HMM
+
+streamlit run src/nautilus/dashboard/regime_dashboard.py
+```
+
+## v5 Regime Multipliers
+
+| Regime | Multiplier | Rationale |
+|--------|-----------|-----------|
+| Bull Quiet | 1.00× | Full exposure — ride India's drift |
+| Bull Volatile | 1.00× | Still bullish directionally |
+| Neutral | 0.75× | Mild reduction |
+| Stress | 0.35× | Meaningful cut |
+| Panic | 0.00× | Cash |
+
+Previous v4 used 0.40× for Neutral and 0.15× for Stress — this averaged
+~0.55× across bull markets, destroying ~45 pp of return with no compensating
+benefit. BigBeluga is fully removed.
+
+## Project structure
+
+```
+nautilus/
+├── data/
+│   └── rbi_repo_rate.csv       # Bundled RBI repo rate history (public domain)
+├── src/nautilus/
+│   ├── config.py               # Paths, tickers, defaults
+│   ├── etl/
+│   │   ├── loader.py           # yfinance + Parquet cache
+│   │   └── macro.py            # Real RBI repo + NIFTYGS10YR.NS bond yield
+│   ├── strategies/
+│   │   ├── momentum.py         # MA signal, WVF, cross-sectional momentum
+│   │   └── regime.py           # HMM fitting + regime containers
+│   ├── backtests/
+│   │   └── engine.py           # Vectorized backtest (no double-shift)
+│   └── dashboard/
+│       └── regime_dashboard.py # Streamlit app
+└── tests/
+    └── test_engine.py          # Unit tests
+```
+
+## Data sources
+
+| Data | Source | Cost |
+|------|--------|------|
+| Nifty 50 prices | `^NSEI` via yfinance | Free |
+| Stock universe | `.NS` tickers via yfinance | Free |
+| 10Y G-Sec yield | `NIFTYGS10YR.NS` via yfinance | Free |
+| RBI repo rate | Bundled CSV (RBI press releases, public domain) | Free |
+
+**No Quandl. No FRED. No Bloomberg. No API keys.**
+
+## Updating RBI repo rate
+
+After each MPC meeting, add a new row to `data/rbi_repo_rate.csv`:
+
+```
+2025-06-06,5.75
+```
+
+Then click **🔄 Refresh Data** in the sidebar.
