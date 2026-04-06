@@ -131,6 +131,12 @@ Fed Funds Rate uses hardcoded policy decision anchors forward-filled on business
 
 ---
 
+## Preview
+
+![Nautilus Dashboard](nautilus-preview.png)
+
+---
+
 ## Project structure
 
 ```
