@@ -701,6 +701,30 @@ with _col_fx:
             font=dict(color=_FONT, size=11),
             x=0.03, y=0.97,
         )
+        # ── High-uncertainty red patch (COVID shock: Mar–Jun 2020) ──────────
+        _unc_spans = [
+            ("2020-02-20", "2020-06-30", "COVID-19 Shock"),
+        ]
+        for _u0, _u1, _ulbl in _unc_spans:
+            _ustart = pd.Timestamp(_u0)
+            _uend   = pd.Timestamp(_u1)
+            if _ustart >= _norm_start or _uend >= _norm_start:
+                fig_brics_sm.add_vrect(
+                    x0=_ustart, x1=_uend,
+                    fillcolor=_rgba("#E74C3C", 0.13),
+                    line_width=0.8, line_color=_rgba("#E74C3C", 0.35),
+                    layer="below",
+                )
+                fig_brics_sm.add_annotation(
+                    x=_ustart + (_uend - _ustart) / 2,
+                    y=1.0, yref="paper",
+                    text=_ulbl,
+                    showarrow=False,
+                    font=dict(color=_rgba("#E74C3C", 0.70), size=8,
+                              family="JetBrains Mono, monospace"),
+                    xanchor="center", yanchor="top",
+                )
+
         fig_brics_sm.update_yaxes(
             title_text="Index (100 = base)", showgrid=True,
             gridcolor=_GRID, tickfont=dict(size=9),
@@ -989,6 +1013,133 @@ if show_yc:
         "▲▼ on FFR panel = Fed policy moves. "
         "Data: ^GSPC, ^TNX, ^IRX via yfinance; FFR from policy anchors."
     )
+
+    # ── Two supplemental FRED panels: Foreign Treasury Holdings | Nominal GDP ─
+    _SUPP_IDS = ("TRESEGINM052N", "NGDPNSAXDCINQ")
+
+    @st.cache_data(ttl=86_400, show_spinner=False)
+    def _load_supp_fred(force):
+        import urllib.request
+        out = {}
+        for sid in _SUPP_IDS:
+            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
+            try:
+                with urllib.request.urlopen(url, timeout=14) as resp:
+                    lines = resp.read().decode().strip().splitlines()
+                vals = {}
+                for row in lines[1:]:
+                    parts = row.split(",")
+                    if len(parts) == 2 and parts[1].strip() not in (".", ""):
+                        try:
+                            vals[parts[0].strip()] = float(parts[1].strip())
+                        except ValueError:
+                            pass
+                out[sid] = vals
+            except Exception as exc:
+                logger.warning("FRED supp fetch failed for %s: %s", sid, exc)
+                out[sid] = {}
+        return out
+
+    _supp_raw = _load_supp_fred(refresh)
+
+    def _fred_series(sid):
+        raw = _supp_raw.get(sid, {})
+        if not raw:
+            return pd.Series(dtype=float)
+        s = pd.Series(raw, dtype=float)
+        s.index = pd.to_datetime(s.index)
+        return s.sort_index().loc[start_ts:end_ts]
+
+    _tres_s = _fred_series("TRESEGINM052N")
+    _ngdp_s = _fred_series("NGDPNSAXDCINQ")
+
+    col_tres, col_ngdp = st.columns(2)
+
+    # ── Left: Foreign Treasury Holdings (TRESEGINM052N) ──────────────────────
+    with col_tres:
+        if not _tres_s.empty:
+            _tres_chg = _tres_s.diff()
+            fig_tres = go.Figure()
+            fig_tres.add_trace(go.Bar(
+                x=_tres_s.index, y=_tres_chg.values,
+                name="MoM Δ",
+                marker_color=[_rgba("#E74C3C", 0.75) if v < 0 else _rgba("#3fb950", 0.75)
+                               for v in _tres_chg.fillna(0)],
+                hovertemplate="<b>%{x|%b %Y}</b><br>MoM Δ: %{y:+,.1f}B<extra></extra>",
+            ))
+            fig_tres.add_trace(go.Scatter(
+                x=_tres_s.index, y=_tres_s.values,
+                name="Level ($B)", yaxis="y2", mode="lines",
+                line=dict(color="#58a6ff", width=2),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Holdings: $%{y:,.0f}B<extra></extra>",
+            ))
+            _t_last = float(_tres_s.iloc[-1]); _t_dt = _tres_s.index[-1]
+            lo_tres = _layout(height=320)
+            lo_tres.update(dict(
+                margin=dict(l=60, r=60, t=40, b=35),
+                title=dict(text="Foreign Holdings of US Treasuries", font=dict(size=12, color=_FONT), x=0.0),
+                yaxis=dict(title="MoM Δ ($B)", showgrid=True, gridcolor=_GRID, tickfont=dict(size=10)),
+                yaxis2=dict(title="Level ($B)", overlaying="y", side="right",
+                            showgrid=False, tickfont=dict(size=10)),
+                legend=dict(orientation="h", y=1.04, font=dict(size=10)),
+                hovermode="x unified",
+                barmode="relative",
+            ))
+            fig_tres.update_layout(**lo_tres)
+            fig_tres.add_annotation(
+                x=_t_dt, y=_t_last, text=f"  ${_t_last:,.0f}B",
+                yref="y2", showarrow=False, xanchor="left",
+                font=dict(color="#58a6ff", size=11, family="monospace"),
+            )
+            st.plotly_chart(fig_tres, use_container_width=True)
+            st.caption("TRESEGINM052N · FRED · Monthly · Foreign & intl accounts holding US Treasuries ($B)")
+        else:
+            st.warning("⚠️ TRESEGINM052N unavailable — FRED endpoint unreachable.")
+
+    # ── Right: Nominal GDP (NGDPNSAXDCINQ) ───────────────────────────────────
+    with col_ngdp:
+        if not _ngdp_s.empty:
+            _ngdp_yoy = _ngdp_s.pct_change(4) * 100          # QoQ 4-period = YoY
+            _ngdp_bar_colors = [
+                _rgba("#E74C3C", 0.75) if v < 0 else _rgba("#d29922", 0.75)
+                for v in _ngdp_yoy.fillna(0)
+            ]
+            fig_ngdp = go.Figure()
+            fig_ngdp.add_trace(go.Bar(
+                x=_ngdp_yoy.index, y=_ngdp_yoy.values,
+                name="YoY %", marker_color=_ngdp_bar_colors,
+                hovertemplate="<b>%{x|Q%q %Y}</b><br>YoY: %{y:+.1f}%<extra></extra>",
+            ))
+            fig_ngdp.add_trace(go.Scatter(
+                x=_ngdp_s.index, y=_ngdp_s.values,
+                name="Level ($B SAAR)", yaxis="y2", mode="lines",
+                line=dict(color="#d29922", width=2),
+                hovertemplate="<b>%{x|Q%q %Y}</b><br>GDP: $%{y:,.0f}B<extra></extra>",
+            ))
+            _g_last = float(_ngdp_s.iloc[-1]); _g_dt = _ngdp_s.index[-1]
+            lo_ngdp = _layout(height=320)
+            lo_ngdp.update(dict(
+                margin=dict(l=60, r=60, t=40, b=35),
+                title=dict(text="US Nominal GDP (SAAR)", font=dict(size=12, color=_FONT), x=0.0),
+                yaxis=dict(title="YoY Growth (%)", showgrid=True, gridcolor=_GRID,
+                           ticksuffix="%", tickfont=dict(size=10)),
+                yaxis2=dict(title="Level ($B)", overlaying="y", side="right",
+                            showgrid=False, tickfont=dict(size=10)),
+                legend=dict(orientation="h", y=1.04, font=dict(size=10)),
+                hovermode="x unified",
+                barmode="relative",
+            ))
+            fig_ngdp.update_layout(**lo_ngdp)
+            fig_ngdp.add_hline(y=0, line_color="#484f58", line_width=1, line_dash="dot")
+            fig_ngdp.add_annotation(
+                x=_g_dt, y=_g_last, text=f"  ${_g_last/1000:,.1f}T",
+                yref="y2", showarrow=False, xanchor="left",
+                font=dict(color="#d29922", size=11, family="monospace"),
+            )
+            st.plotly_chart(fig_ngdp, use_container_width=True)
+            st.caption("NGDPNSAXDCINQ · FRED · Quarterly · US Nominal GDP, not seasonally adj., current $B SAAR")
+        else:
+            st.warning("⚠️ NGDPNSAXDCINQ unavailable — FRED endpoint unreachable.")
 
 # ── US–India Trade & Global EPU ───────────────────────────────────────────────
 st.markdown(
