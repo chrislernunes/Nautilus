@@ -583,10 +583,10 @@ if hmm_ok:
         "Hard Gate (right axis, dotted red) = binary 1.0/0.75/0 from dominant HMM state, pre-shifted +1D."
     )
 
-# ── Monthly Returns Heatmap ───────────────────────────────────────────────────
+# ── Monthly Returns Heatmap + BRICS FX ────────────────────────────────────────
 _month_labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
-st.markdown('<div class="section-title">Monthly Returns Heatmap</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Monthly Returns Heatmap · BRICS FX Monitor</div>', unsafe_allow_html=True)
 try: _monthly_ret = price.resample("ME").last().pct_change().dropna() * 100
 except Exception: _monthly_ret = price.resample("M").last().pct_change().dropna() * 100
 
@@ -609,7 +609,107 @@ lo_mr = _layout(height=max(220, len(_pivot)*30+80))
 lo_mr["margin"] = dict(l=55, r=80, t=40, b=10)
 lo_mr["xaxis"]["side"] = "top"
 fig_mr.update_layout(**lo_mr)
-st.plotly_chart(fig_mr, use_container_width=True)
+
+# BRICS FX loader (shared with standalone panel below if shown)
+_BRICS_SERIES = {
+    "INR": ("CCUSMA02INM618N", "#F0A500", "India (INR)"),
+    "CNY": ("CCUSMA02CNM618N", "#58a6ff", "China (CNY)"),
+    "BRL": ("CCUSMA02BRM618N", "#3fb950", "Brazil (BRL)"),
+    "ZAR": ("CCUSMA02ZAM618N", "#d29922", "S.Africa (ZAR)"),
+    "RUB": ("CCUSMA02RUM618N", "#E74C3C", "Russia (RUB)"),
+}
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def _load_brics_fx(force: bool) -> dict:
+    """Fetch BRICS FX monthly series from FRED public CSV endpoint (no API key)."""
+    import urllib.request
+    out = {}
+    for ccy, (series_id, _, _label) in _BRICS_SERIES.items():
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                lines = resp.read().decode().strip().splitlines()
+            vals = {}
+            for row in lines[1:]:
+                parts = row.split(",")
+                if len(parts) == 2 and parts[1].strip() != ".":
+                    try:
+                        vals[parts[0].strip()] = float(parts[1].strip())
+                    except ValueError:
+                        pass
+            out[ccy] = vals
+        except Exception as exc:
+            logger.warning("FRED fetch failed for %s: %s", ccy, exc)
+            out[ccy] = {}
+    return out
+
+_brics_raw = _load_brics_fx(refresh)
+
+def _build_brics_frames(raw: dict, s_ts, e_ts) -> dict:
+    frames = {}
+    for ccy, vals in raw.items():
+        if vals:
+            s = pd.Series(vals, dtype=float)
+            s.index = pd.to_datetime(s.index)
+            s = s.sort_index().loc[s_ts:e_ts]
+            if not s.empty:
+                frames[ccy] = s
+    return frames
+
+_brics_frames = _build_brics_frames(_brics_raw, start_ts, end_ts)
+
+# Side-by-side layout
+_col_hm, _col_fx = st.columns([3, 2])
+
+with _col_hm:
+    st.plotly_chart(fig_mr, use_container_width=True)
+
+with _col_fx:
+    if _brics_frames:
+        _norm_start = max(s.index[0] for s in _brics_frames.values())
+        fig_brics_sm = go.Figure()
+        for ccy, s in _brics_frames.items():
+            _, color, label = _BRICS_SERIES[ccy]
+            _base_slice = s.loc[s.index >= _norm_start]
+            if _base_slice.empty:
+                continue
+            _base = float(_base_slice.iloc[0])
+            s_norm = s / _base * 100
+            fig_brics_sm.add_trace(go.Scatter(
+                x=s_norm.index, y=s_norm.values,
+                mode="lines", name=label,
+                line=dict(color=color, width=1.6),
+                hovertemplate=f"<b>%{{x|%b %Y}}</b><br>{label}: %{{y:.1f}}<extra></extra>",
+            ))
+            # latest label
+            _lv = float(s_norm.iloc[-1])
+            fig_brics_sm.add_annotation(
+                x=s_norm.index[-1], y=_lv,
+                text=f"  {_lv:.0f}",
+                showarrow=False, xanchor="left",
+                font=dict(color=color, size=8, family="JetBrains Mono, monospace"),
+            )
+        lo_sm = _layout(height=max(220, len(_pivot)*30+80))
+        lo_sm["margin"] = dict(l=50, r=45, t=40, b=10)
+        lo_sm["hovermode"] = "x unified"
+        lo_sm["legend"] = dict(
+            bgcolor="rgba(22,27,34,0.85)", bordercolor=_LINE, borderwidth=1,
+            font=dict(size=9), x=0.01, y=0.99,
+        )
+        lo_sm["title"] = dict(
+            text="BRICS FX vs USD (norm. 100)",
+            font=dict(color=_FONT, size=11),
+            x=0.03, y=0.97,
+        )
+        fig_brics_sm.update_yaxes(
+            title_text="Index (100 = base)", showgrid=True,
+            gridcolor=_GRID, tickfont=dict(size=9),
+        )
+        fig_brics_sm.update_layout(**lo_sm)
+        st.plotly_chart(fig_brics_sm, use_container_width=True)
+        st.caption("Monthly avg USD FX · OECD via FRED · higher = weaker local ccy")
+    else:
+        st.warning("⚠️ BRICS FX unavailable (fred.stlouisfed.org)")
 
 # ── Macro Panel ───────────────────────────────────────────────────────────────
 if show_macro:
@@ -889,6 +989,182 @@ if show_yc:
         "▲▼ on FFR panel = Fed policy moves. "
         "Data: ^GSPC, ^TNX, ^IRX via yfinance; FFR from policy anchors."
     )
+
+# ── US–India Trade & Global EPU ───────────────────────────────────────────────
+st.markdown(
+    '<div class="section-title">'
+    'US–India Trade Flow &nbsp;·&nbsp; Global Economic Policy Uncertainty'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def _load_fred_series(series_ids: tuple, force: bool) -> dict:
+    """Fetch multiple FRED series via public CSV endpoint. Returns {id: {date: val}}."""
+    import urllib.request
+    out = {}
+    for sid in series_ids:
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
+        try:
+            with urllib.request.urlopen(url, timeout=12) as resp:
+                lines = resp.read().decode().strip().splitlines()
+            vals = {}
+            for row in lines[1:]:
+                parts = row.split(",")
+                if len(parts) == 2 and parts[1].strip() not in (".", ""):
+                    try:
+                        vals[parts[0].strip()] = float(parts[1].strip())
+                    except ValueError:
+                        pass
+            out[sid] = vals
+        except Exception as exc:
+            logger.warning("FRED fetch failed for %s: %s", sid, exc)
+            out[sid] = {}
+    return out
+
+_TRADE_IDS  = ("EXP5330", "EXP0015", "IMP5330", "IMP0015")
+_EPU_IDS    = ("USEPUINDXM", "CHIEPUINDXM", "EUEPUINDXM", "INDEPUINDXM")
+
+_trade_raw  = _load_fred_series(_TRADE_IDS,  refresh)
+_epu_raw    = _load_fred_series(_EPU_IDS,    refresh)
+
+def _to_series(raw: dict, sid: str, s_ts, e_ts) -> "pd.Series":
+    d = raw.get(sid, {})
+    if not d:
+        return pd.Series(dtype=float)
+    s = pd.Series(d, dtype=float)
+    s.index = pd.to_datetime(s.index)
+    return s.sort_index().loc[s_ts:e_ts]
+
+_col_trade, _col_epu = st.columns(2)
+
+# ── Left: US–India Trade ─────────────────────────────────────────────────────
+with _col_trade:
+    _exp_ind  = _to_series(_trade_raw, "EXP5330", start_ts, end_ts)
+    _exp_wld  = _to_series(_trade_raw, "EXP0015", start_ts, end_ts)
+    _imp_ind  = _to_series(_trade_raw, "IMP5330", start_ts, end_ts)
+    _imp_wld  = _to_series(_trade_raw, "IMP0015", start_ts, end_ts)
+
+    _trade_ok = not (_exp_ind.empty and _imp_ind.empty)
+    if _trade_ok:
+        # India share of world exports/imports (%)
+        _exp_share = (_exp_ind / _exp_wld * 100).dropna() if not (_exp_ind.empty or _exp_wld.empty) else pd.Series(dtype=float)
+        _imp_share = (_imp_ind / _imp_wld * 100).dropna() if not (_imp_ind.empty or _imp_wld.empty) else pd.Series(dtype=float)
+
+        fig_tr = make_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+            subplot_titles=[
+                "US Exports & Imports to/from India (USD mn)",
+                "India Share of Total US Trade (%)",
+            ],
+        )
+        # Absolute flows
+        if not _exp_ind.empty:
+            fig_tr.add_trace(go.Scatter(
+                x=_exp_ind.index, y=_exp_ind.values, mode="lines",
+                name="US→India Exports", line=dict(color="#3fb950", width=1.6),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Exports: $%{y:,.0f}M<extra></extra>",
+            ), row=1, col=1)
+        if not _imp_ind.empty:
+            fig_tr.add_trace(go.Scatter(
+                x=_imp_ind.index, y=_imp_ind.values, mode="lines",
+                name="US←India Imports", line=dict(color="#F0A500", width=1.6),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Imports: $%{y:,.0f}M<extra></extra>",
+            ), row=1, col=1)
+        # Trade balance (exports − imports)
+        if not _exp_ind.empty and not _imp_ind.empty:
+            _bal = (_exp_ind - _imp_ind).reindex(_exp_ind.index.union(_imp_ind.index)).interpolate()
+            _bal_clr = ["#3fb950" if v >= 0 else "#E74C3C" for v in _bal.fillna(0)]
+            fig_tr.add_trace(go.Bar(
+                x=_bal.index, y=_bal.values, name="Trade Balance",
+                marker_color=_bal_clr, opacity=0.55,
+                hovertemplate="<b>%{x|%b %Y}</b><br>Balance: $%{y:+,.0f}M<extra></extra>",
+            ), row=1, col=1)
+        # Share lines
+        if not _exp_share.empty:
+            fig_tr.add_trace(go.Scatter(
+                x=_exp_share.index, y=_exp_share.values, mode="lines",
+                name="Export share", line=dict(color="#3fb950", width=1.4, dash="dot"),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Export share: %{y:.2f}%<extra></extra>",
+            ), row=2, col=1)
+        if not _imp_share.empty:
+            fig_tr.add_trace(go.Scatter(
+                x=_imp_share.index, y=_imp_share.values, mode="lines",
+                name="Import share", line=dict(color="#F0A500", width=1.4, dash="dot"),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Import share: %{y:.2f}%<extra></extra>",
+            ), row=2, col=1)
+
+        lo_tr = _layout(height=480)
+        lo_tr["margin"] = dict(l=60, r=20, t=50, b=30)
+        lo_tr["hovermode"] = "x unified"
+        lo_tr["legend"] = dict(bgcolor="rgba(22,27,34,0.85)", bordercolor=_LINE,
+                               borderwidth=1, font=dict(size=9), x=0.01, y=0.99)
+        fig_tr.update_yaxes(title_text="USD mn", showgrid=True, gridcolor=_GRID,
+                            tickformat=",.0f", tickfont=dict(size=9), row=1, col=1)
+        fig_tr.update_yaxes(title_text="Share (%)", showgrid=True, gridcolor=_GRID,
+                            ticksuffix="%", tickfont=dict(size=9), row=2, col=1)
+        fig_tr.update_layout(**lo_tr)
+        st.plotly_chart(fig_tr, use_container_width=True)
+        st.caption("US Census Bureau / BEA via FRED · EXP5330, IMP5330, EXP0015, IMP0015 · NSA monthly")
+    else:
+        st.warning("⚠️ US–India trade data unavailable (fred.stlouisfed.org)")
+
+# ── Right: Global EPU ─────────────────────────────────────────────────────────
+with _col_epu:
+    _EPU_META = {
+        "USEPUINDXM":  ("#58a6ff", "US"),
+        "CHIEPUINDXM": ("#E74C3C", "China"),
+        "EUEPUINDXM":  ("#d29922", "Europe"),
+        "INDEPUINDXM": ("#F0A500", "India"),
+    }
+    _epu_series = {sid: _to_series(_epu_raw, sid, start_ts, end_ts) for sid in _EPU_META}
+    _epu_ok = any(not s.empty for s in _epu_series.values())
+
+    if _epu_ok:
+        fig_epu = go.Figure()
+        for sid, (color, label) in _EPU_META.items():
+            s = _epu_series[sid]
+            if s.empty:
+                continue
+            # 3M EWM smoothing for readability
+            s_sm = s.ewm(span=3, adjust=False).mean()
+            fig_epu.add_trace(go.Scatter(
+                x=s_sm.index, y=s_sm.values, mode="lines",
+                name=label, line=dict(color=color, width=1.6),
+                hovertemplate=f"<b>%{{x|%b %Y}}</b><br>{label} EPU: %{{y:.1f}}<extra></extra>",
+            ))
+            # Latest annotation
+            _lv = float(s_sm.iloc[-1])
+            fig_epu.add_annotation(
+                x=s_sm.index[-1], y=_lv,
+                text=f"  {label} {_lv:.0f}",
+                showarrow=False, xanchor="left",
+                font=dict(color=color, size=8, family="JetBrains Mono, monospace"),
+            )
+        # High-uncertainty threshold band (index > 200 = historically elevated)
+        fig_epu.add_hrect(
+            y0=200, y1=fig_epu.data[0].y.max() * 1.05 if fig_epu.data else 400,
+            fillcolor=_rgba("#E74C3C", 0.05),
+            line_width=0.5, line_color=_rgba("#E74C3C", 0.25),
+            annotation_text="Elevated (>200)", annotation_position="top left",
+            annotation_font=dict(color=_rgba("#E74C3C", 0.7), size=8),
+        )
+        lo_epu = _layout(height=480)
+        lo_epu["margin"] = dict(l=55, r=55, t=50, b=30)
+        lo_epu["hovermode"] = "x unified"
+        lo_epu["legend"] = dict(bgcolor="rgba(22,27,34,0.85)", bordercolor=_LINE,
+                                borderwidth=1, font=dict(size=9), x=0.01, y=0.99)
+        lo_epu["title"] = dict(
+            text="Economic Policy Uncertainty Index (3M EWM)",
+            font=dict(color=_FONT, size=11), x=0.03, y=0.97,
+        )
+        fig_epu.update_yaxes(title_text="EPU Index", showgrid=True,
+                             gridcolor=_GRID, tickfont=dict(size=9))
+        fig_epu.update_layout(**lo_epu)
+        st.plotly_chart(fig_epu, use_container_width=True)
+        st.caption("Baker, Bloom & Davis · USEPUINDXM, CHIEPUINDXM, EUEPUINDXM, INDEPUINDXM via FRED · NSA monthly")
+    else:
+        st.warning("⚠️ EPU data unavailable (fred.stlouisfed.org)")
 
 # ── Volatility Panel ──────────────────────────────────────────────────────────
 if show_vol:
