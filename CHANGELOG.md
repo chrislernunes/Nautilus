@@ -2,7 +2,7 @@
 
 All notable changes to Nautilus are documented here.
 
-## [0.5.5] — 2026-04-09
+## [0.5.8] — 2026-04-09
 
 ### Fixed
 - **Data discovery**: `config.py` now finds bundled CSVs inside
