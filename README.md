@@ -8,17 +8,6 @@
 
 ---
 
-## Installation
-
-```bash
-pip install nautilus-regime
-nautilus          # launches the dashboard at http://localhost:8501
-```
-
-No API key required. All data sourced from yfinance and bundled CSVs.
-
----
-
 ## Use Cases
 
 ### Regime-Aware Strategy Development
