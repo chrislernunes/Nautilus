@@ -3,9 +3,9 @@ requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nautilus-regime"
-version = "0.5.5"
-description = "India Macro-Momentum Regime Dashboard — 5-state HMM, yfinance-powered, no API key required"
+name = "nautilus-spark"
+version = "0.5.8"
+description = "India Macro Regime - 5-state HMM"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -48,7 +48,7 @@ dev = [
 ]
 
 [project.scripts]
-nautilus = "nautilus.cli:main"
+nautilus-spark = "nautilus.cli:main"
 
 [project.urls]
 Homepage       = "https://github.com/chrislernunes/nautilus"
