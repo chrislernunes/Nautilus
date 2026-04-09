@@ -1,0 +1,2 @@
+[console_scripts]
+nautilus = nautilus.cli:main
