@@ -2,6 +2,8 @@
 
 **India Macro-Momentum Regime System** — 5-state Gaussian HMM · regime-gated backtests · full macro overlay
 
+Nautilus is a state-space modeling framework that applies a 5-state Gaussian Hidden Markov Model to infer latent market regimes from price, volatility, and macro data. These regimes drive a rule-based execution layer with gated exposure and adaptive sizing, enabling robust, forward-consistent strategy behavior.
+
 ![PyPI version](https://img.shields.io/pypi/v/nautilus-spark)
 ![Python](https://img.shields.io/pypi/pyversions/nautilus-spark)
 ![License](https://img.shields.io/pypi/l/nautilus-spark)
