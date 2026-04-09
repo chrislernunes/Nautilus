@@ -2,9 +2,9 @@
 
 **India Macro-Momentum Regime System** — 5-state Gaussian HMM · regime-gated backtests · full macro overlay
 
-[![PyPI version](https://img.shields.io/pypi/v/nautilus-regime.svg)](https://pypi.org/project/nautilus-regime/)
-[![Python](https://img.shields.io/pypi/pyversions/nautilus-regime.svg)](https://pypi.org/project/nautilus-regime/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![PyPI version](https://img.shields.io/pypi/v/nautilus-spark)
+![Python](https://img.shields.io/pypi/pyversions/nautilus-spark)
+![License](https://img.shields.io/pypi/l/nautilus-spark)
 
 ---
 
