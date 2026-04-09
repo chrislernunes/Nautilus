@@ -191,3 +191,43 @@ Then click **🔄 Refresh Data** in the sidebar to bust the Streamlit cache.
 | Transaction Cost | 10 bps | Applied per side in backtest engine |
 | Regime Shading | On | Colour bands on price chart |
 | Live Mode | Off | Auto-refresh every 60 seconds |
+
+---
+
+## Library Usage
+
+The `nautilus` package is designed as a **reusable Python library**. You can import individual modules and build far more than just the Streamlit dashboard.
+
+## Advanced Library Usage
+
+After `pip install nautilus-spark`, the package becomes a full-featured **regime engine** you can import and extend in any Python script, notebook, or production system.
+
+Here are 25 advanced ways serious users leverage `nautilus` in their own code:
+
+| # | Use Case | Description | Perfect for | Quick Code Sketch |
+|---|----------|-------------|-------------|-------------------|
+| 1 | **HMM States as ML Features** | Extract regime labels + posterior probabilities and append them as features to any ML pipeline (XGBoost, LightGBM, CatBoost, LSTM, etc.). | ML quants & feature engineers | `from nautilus.strategies.regime import RegimeHMM`<br>`hmm = RegimeHMM(n_components=5)`<br>`probs = hmm.predict_proba(features_df)`<br>`ml_df = pd.concat([features_df, probs], axis=1)` |
+| 2 | **Sector / Stock-Level Regime Analysis** | Run the identical 5-state HMM on any Nifty 50 stock, sector ETF, or Bank Nifty for relative strength or pair-trading signals. | Sector rotation & stock pickers | `stock = load_index("RELIANCE.NS")`<br>`features = build_hmm_features(stock)`<br>`hmm.fit(features)` |
+| 3 | **Options / Volatility Trading Overlay** | Scale option delta/gamma/vega exposure using the Hard Gate or current regime probability (sell premium only in Bull Quiet/Volatile). | Options & vol traders | `gate = hard_gate_from(hmm_result)`<br>`option_position = base_signal * gate * vega_scaler` |
+| 4 | **Hyperparameter Grid Search** | Systematically test number of states, EM iterations, EWM span, macro features, etc. and rank by backtest Sharpe/Calmar. | Strategy researchers | `from itertools import product`<br>`for n, span in product([3,5,7], [3,5,8]):`<br>`    result = run_experiment(n_states=n, ewm=span)` |
+| 5 | **Walk-Forward Out-of-Sample Validation** | Rolling-window re-fit the HMM to simulate true out-of-sample regime detection and avoid look-ahead bias. | Academic & robust backtesters | `for train_end in pd.date_range(...):`<br>`    hmm.fit(data[:train_end])`<br>`    oos = hmm.predict_proba(data[train_end:])` |
+| 6 | **Portfolio-Wide Risk Overlay** | Apply one Nifty-derived Hard Gate across an entire equity, mutual-fund, or multi-asset portfolio to derisk everything in Stress/Panic regimes. | Portfolio managers & robo-advisors | `portfolio = pd.concat([asset1, asset2, ...], axis=1)`<br>`portfolio_gated = portfolio.mul(hard_gate, axis=0)` |
+| 7 | **Multi-Model Ensemble Regimes** | Average or vote across 2–4 different HMMs (different features or state counts) for a more robust gate. | Advanced systematic traders | `gate = (gate1 + gate2 + gate3) / 3` |
+| 8 | **Automated Daily Reporting Bot** | Script that runs every morning, prints current regime + 20-day forecast + signal, and pushes to Telegram/Discord/email. | Solo traders & small desks | `result = hmm.forward_simulate(20)`<br>`telegram.send(f"Regime: {current_regime} \| Gate: {gate.iloc[-1]}")` |
+| 9 | **FastAPI / REST Microservice** | Wrap the regime engine behind a tiny API so trading bots or dashboards can query today's gate & probabilities. | Prop desks & algo platforms | `@app.get("/regime")`<br>`def get_regime():`<br>`    return {"gate": hard_gate.iloc[-1], "probs": posterior.tolist()}` |
+| 10 | **Integration with VectorBT / Backtrader** | Feed Nautilus regimes + signals into popular backtesting frameworks for ultra-fast vectorized testing or live execution. | Power users | `import vectorbt as vbt`<br>`pf = vbt.Portfolio.from_signals(price, entries=signal * gate)` |
+| 11 | **Custom Macro Feature Injection** | Add your own features (FII/DII flows, VIX, USDINR, CPI, etc.) to the HMM input pipeline. | Macro overlay researchers | `custom_features = build_hmm_features(price, extra_df=my_macro)`<br>`hmm.fit(custom_features)` |
+| 12 | **Regime-Based Dynamic Position Sizing** | Combine Hard Gate with Kelly, volatility targeting, or risk-parity sizing per regime. | Risk-aware traders | `size = sharpened_kelly * hard_gate * (target_vol / current_vol)` |
+| 13 | **Drawdown-Regime Filtering** | Create hybrid filters that only allow trades when both HMM regime and rolling drawdown are in acceptable states. | Drawdown-conscious quants | `filter = (hard_gate == 1) & (drawdown < 0.08)` |
+| 14 | **Markov Transition Matrix Analysis** | Study regime persistence and transition probabilities to forecast regime duration and turning points. | Regime-cycle researchers | `trans = hmm_result.trans_matrix`<br>`expected_duration = 1 / (1 - np.diag(trans))` |
+| 15 | **Posterior Probability Thresholding** | Generate probabilistic signals (e.g. only go long when P(Bull Quiet) > 0.65). | Probabilistic traders | `signal = (hmm.probs["Bull Quiet"] > 0.65).astype(int)` |
+| 16 | **Batch Multi-Asset Regime Factory** | Run the full HMM + backtest pipeline on 50+ stocks or indices in one go and compare regime statistics. | Quant researchers | `results = {ticker: run_full_pipeline(ticker) for ticker in universe}` |
+| 17 | **Monte-Carlo Regime Path Simulation** | Simulate thousands of future regime paths using the transition matrix for stress-testing. | Risk & scenario analysts | `paths = hmm.monte_carlo_simulate(n_paths=10000, steps=252)` |
+| 18 | **Regime-Conditioned Strategy Library** | Build a collection of strategies that only activate in specific regimes (e.g. momentum only in Bull states). | Strategy developers | `if current_regime in ["Bull Quiet", "Bull Volatile"]:`<br>`    signal = momentum_strategy(...)` |
+| 19 | **Anomaly Detection in Regime Shifts** | Flag unusual transitions or low-probability regime jumps for early warning. | Surveillance & risk teams | `if trans_prob < 0.01:`<br>`    alert("Rare regime jump detected")` |
+| 20 | **Integration with pandas-ta / TA-Lib** | Combine Nautilus regimes with 100+ technical indicators for hybrid signals. | Technical + regime traders | `import pandas_ta as ta`<br>`df["rsi"] = ta.rsi(price)`<br>`final_signal = regime_gate * (df["rsi"] < 30)` |
+| 21 | **Backtest with Realistic Slippage & Impact** | Extend the backtest engine with custom slippage models that vary by regime. | Institutional-grade backtesters | `result = run_backtest(..., slippage_model=regime_slippage)` |
+| 22 | **Live Data Feed + Intraday Extension** | Hook Nautilus into websocket feeds (e.g. Zerodha, Alice Blue) for near-real-time regime updates. | Algo traders | `while True:`<br>`    tick = ws.get_tick()`<br>`    live_hmm.update(tick)` |
+| 23 | **Cloud / Serverless Deployment** | Deploy the regime engine as AWS Lambda, Google Cloud Function, or Vercel cron job for daily signal generation. | Production teams | `# lambda_handler`<br>`return compute_current_gate()` |
+| 24 | **Regime Attribution + Event Studies** | Correlate regime changes with macro events (RBI MPC, FOMC, budget day, etc.) for causal research. | Academic & macro researchers | `event_study = attribution.groupby(event_dates).agg({"return": "mean"})` |
+| 25 | **Hybrid Model Benchmarking** | Compare Nautilus 5-state HMM against simpler models (RSI regime, volatility regime, 200-DMA only) in the same backtest engine. | Model validation & research | `bench = run_backtest(plain_ma_signal)`<br>`nautilus_perf = run_backtest(regime_signal)` |
