@@ -1,7 +1,7 @@
 # Nautilus
 
 <p align="center">
-  <img src="assets/logo.png" alt="Nautilus Logo" width="180"/>
+  <img src="logo.png" alt="Nautilus Logo" width="180"/>
 </p>
 
 <p align="center">
