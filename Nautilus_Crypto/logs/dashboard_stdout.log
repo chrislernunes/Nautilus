@@ -1,0 +1,7 @@
+
+Nautilus Crypto Plotly dashboard: http://127.0.0.1:8050
+
+Dash is running on http://127.0.0.1:8050/
+
+ * Serving Flask app 'python.dashboard.app'
+ * Debug mode: off

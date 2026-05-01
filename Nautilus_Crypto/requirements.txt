@@ -1,0 +1,30 @@
+# Nautilus BTC — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# Core scientific stack
+numpy>=1.26.0
+pandas>=2.1.0
+scipy>=1.11.0
+
+# HMM model
+hmmlearn>=0.3.0
+
+# WebSocket & HTTP
+websockets>=12.0
+aiohttp>=3.9.0
+
+# Extended historical data (daily chart max history)
+yfinance>=0.2.36
+
+# Plotly web dashboard + Rich backtest output
+plotly>=5.18.0
+dash>=2.14.0
+rich>=13.7.0
+
+# C++ build tools (optional — only needed to compile the C++ layer)
+pybind11>=2.11.0
+setuptools>=68.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
